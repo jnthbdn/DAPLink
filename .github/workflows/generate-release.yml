@@ -45,6 +45,7 @@ jobs:
       with:
         repo_token: "${{ secrets.GITHUB_TOKEN }}"
         prerelease: false
+        automatic_release_tag: "lastest"
         files: |
           projectfiles/make_gcc_arm/stm32f103xb_bl/build/stm32f103xb_bl.bin
           projectfiles/make_gcc_arm/stm32f103xb_bl/build/stm32f103xb_bl_crc.bin
