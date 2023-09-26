@@ -1,0 +1,8 @@
+common:
+    macros:
+        - USB_PROD_STR="STeamy32 CMSIS-DAP"
+    sources:
+        board:
+            - source/board/steamy32.c
+        family:
+            - source/family/st/stm32wb55rg/target.c
