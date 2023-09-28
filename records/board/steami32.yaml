@@ -6,6 +6,6 @@ common:
         - HAL_SPI_MODULE_ENABLED
     sources:
         board:
-            - source/board/steami/steami32.c
+            - source/board/steami/
         family:
             - source/family/st/stm32wb55rg/target.c
