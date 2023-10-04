@@ -22,31 +22,45 @@
 #include "target_family.h"
 #include "target_board.h"
 
+#include "error_steami_file.h"
 #include "steami_i2c.h"
+#include "steami_spi.h"
+#include "steami_flash.h"
 
-char* plop_file = "Je suis super content d'être ici !";
-uint32_t plop_file_size = 35;
+SPI_HandleTypeDef hspi = {0};
+I2C_HandleTypeDef hi2c = {0};
 
-static uint32_t read_plop_file(uint32_t sector_offset, uint8_t* data, uint32_t num_sector){
 
-    uint32_t read_pos = VFS_SECTOR_SIZE * sector_offset;
-
-    if( read_pos < plop_file_size ){
-        for( uint32_t i = 0; (read_pos+ i)  < plop_file_size; ++i ){
-            data[i] = plop_file[read_pos + i];
-        }
-    }
-
-    return VFS_SECTOR_SIZE;
-}
+char plop[50] = {0};
 
 void vfs_user_build_filesystem_hook(){
-    vfs_create_file("PLOP    TXT", read_plop_file, 0, plop_file_size);
+    create_steami_error_file("STMI_ERRTXT");
 }
 
 static void prerun_board_config(void)
 {
-    steami_i2c_init();
+    steami_i2c_set_handler(&hi2c);
+    steami_spi_set_handler(&hspi);
+
+    // Test I2C init
+    if( steami_i2c_init() != HAL_OK ){
+        set_steami_error_content("I2C init failed !");
+        return;
+    }
+
+    // Test SPI init
+    if( steami_spi_init() != HAL_OK ){
+        set_steami_error_content("SPI init failed !");
+        return;
+    }
+
+    if( ! steami_flash_init() ){
+        set_steami_error_content( "Flash init failed !");
+        return;
+    }
+
+    sprintf(plop, "Flash\r\n\tID: 0x%02X\r\n\tManufacturer: 0x%02X", read_device_id(), read_manufacturer_id());
+    set_steami_error_content(plop);
 }
 
 const board_info_t g_board_info = {
