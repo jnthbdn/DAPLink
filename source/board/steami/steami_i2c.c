@@ -2,23 +2,24 @@
 
 #include "stm32f1xx_hal.h"
 #include "stm32f1xx_hal_dma.h"
-#include "stm32f1xx_hal_i2c.h"
 #include "stm32f1xx_hal_rcc.h"
 #include "stm32f1xx_hal_gpio.h"
 
 #include "stdint.h"
+#include "stdbool.h"
 
 #define I2C_BUFFER_SIZE 1024
 
-I2C_HandleTypeDef i2c_handle = {0};
+bool is_listen_I2C = false;
+I2C_HandleTypeDef* i2c_handle = NULL;
 uint8_t i2c_buffer[I2C_BUFFER_SIZE] = {0};
 
 void I2C1_EV_IRQHandler(void){
-    HAL_I2C_EV_IRQHandler(&i2c_handle);
+    HAL_I2C_EV_IRQHandler(i2c_handle);
 }
 
 void I2C1_ER_IRQHandler(void){
-    HAL_I2C_ER_IRQHandler(&i2c_handle);
+    HAL_I2C_ER_IRQHandler(i2c_handle);
 }
 
 
@@ -43,6 +44,14 @@ void HAL_I2C_MspInit(I2C_HandleTypeDef *hi2c){
     HAL_NVIC_EnableIRQ(I2C1_ER_IRQn);
 }
 
+void HAL_I2C_MspDeInit(I2C_HandleTypeDef *hi2c){
+    (void)hi2c;
+
+    HAL_NVIC_DisableIRQ(I2C1_EV_IRQn);
+    HAL_NVIC_DisableIRQ(I2C1_ER_IRQn);
+    __HAL_RCC_I2C1_CLK_DISABLE();
+}
+
 void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
 {
 	if(TransferDirection == I2C_DIRECTION_TRANSMIT) 
@@ -56,7 +65,8 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
 }
 
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c){
-    HAL_I2C_EnableListen_IT(hi2c);
+
+    if( is_listen_I2C ) HAL_I2C_EnableListen_IT(hi2c);
 }
 
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c){
@@ -64,19 +74,30 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c){
 }
 
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c){
-	HAL_I2C_EnableListen_IT(hi2c);
+    if( is_listen_I2C ) HAL_I2C_EnableListen_IT(hi2c);
+}
+
+void steami_i2c_set_handler(I2C_HandleTypeDef *hi2c){
+    i2c_handle = hi2c;
 }
 
 HAL_StatusTypeDef steami_i2c_init(){
-    i2c_handle.Instance = I2C1;
-    i2c_handle.Init.ClockSpeed = 100000;
-    i2c_handle.Init.OwnAddress1 = 0x76;
-    i2c_handle.Init.OwnAddress2 = 0x00;
-    i2c_handle.Init.DutyCycle = I2C_DUTYCYCLE_2;
-    i2c_handle.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
-    i2c_handle.Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
-    i2c_handle.Init.GeneralCallMode = I2C_GENERALCALL_DISABLED;
-    i2c_handle.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
+
+    if( i2c_handle == NULL ){
+        return HAL_ERROR;
+    }
+
+    HAL_StatusTypeDef status;
+
+    i2c_handle->Instance = I2C1;
+    i2c_handle->Init.ClockSpeed = 100000;
+    i2c_handle->Init.OwnAddress1 = 0x76;
+    i2c_handle->Init.OwnAddress2 = 0x00;
+    i2c_handle->Init.DutyCycle = I2C_DUTYCYCLE_2;
+    i2c_handle->Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
+    i2c_handle->Init.DualAddressMode = I2C_DUALADDRESS_DISABLE;
+    i2c_handle->Init.GeneralCallMode = I2C_GENERALCALL_DISABLED;
+    i2c_handle->Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
 
     GPIO_InitTypeDef led = {0};
     led.Pin = GPIO_PIN_6;
@@ -87,9 +108,28 @@ HAL_StatusTypeDef steami_i2c_init(){
     HAL_GPIO_Init(GPIOA, &led);
     HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
 
-    return HAL_I2C_Init(&i2c_handle);
+    status =  HAL_I2C_Init(i2c_handle);
+
+    if( status != HAL_OK ){
+        return status;
+    }
+
+    status =  HAL_I2C_EnableListen_IT(i2c_handle);
+
+    if( status != HAL_OK ){
+        return status;
+    }
+
+    is_listen_I2C = true;
+    return HAL_OK;
 }
 
-HAL_StatusTypeDef steami_i2c_start_slave(){
-    return HAL_I2C_EnableListen_IT(&i2c_handle);
+HAL_StatusTypeDef steami_i2c_deinit(){
+    if( i2c_handle == NULL ){
+        return HAL_ERROR;
+    }
+
+    is_listen_I2C = false;
+    HAL_I2C_DisableListen_IT(i2c_handle);
+    return HAL_I2C_DeInit(i2c_handle);
 }
