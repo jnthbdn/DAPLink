@@ -104,7 +104,7 @@ HAL_StatusTypeDef steami_spi_init(){
     handle_spi->Init.CLKPolarity = SPI_POLARITY_LOW;
     handle_spi->Init.CLKPhase = SPI_PHASE_1EDGE;
     handle_spi->Init.NSS = SPI_NSS_SOFT;
-    handle_spi->Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_256; //get_baudrate_prescaler(14000000);
+    handle_spi->Init.BaudRatePrescaler = get_baudrate_prescaler(14000000);
     handle_spi->Init.FirstBit = SPI_FIRSTBIT_MSB;
     handle_spi->Init.TIMode = SPI_TIMODE_DISABLE;
     handle_spi->Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
