@@ -8,3 +8,4 @@ HAL_StatusTypeDef steami_spi_init();
 HAL_StatusTypeDef steami_spi_deinit();
 
 HAL_StatusTypeDef spi_steami_transfer_receive(uint8_t* tx_buffer, uint8_t* rx_buffer, uint16_t buffer_size, uint32_t timeout);
+HAL_StatusTypeDef spi_steami_transfer(uint8_t* data, uint16_t data_size, uint32_t timeout);

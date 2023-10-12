@@ -104,7 +104,7 @@ HAL_StatusTypeDef steami_spi_init(){
     handle_spi->Init.CLKPolarity = SPI_POLARITY_LOW;
     handle_spi->Init.CLKPhase = SPI_PHASE_1EDGE;
     handle_spi->Init.NSS = SPI_NSS_SOFT;
-    handle_spi->Init.BaudRatePrescaler = get_baudrate_prescaler(14000000);
+    handle_spi->Init.BaudRatePrescaler = get_baudrate_prescaler(2000000);
     handle_spi->Init.FirstBit = SPI_FIRSTBIT_MSB;
     handle_spi->Init.TIMode = SPI_TIMODE_DISABLE;
     handle_spi->Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
@@ -126,6 +126,19 @@ HAL_StatusTypeDef spi_steami_transfer_receive(uint8_t* tx_buffer, uint8_t* rx_bu
 
     enable_cs();
     status = HAL_SPI_TransmitReceive(handle_spi, tx_buffer, rx_buffer, buffer_size, timeout);
+    disable_cs();
+
+    return status;
+}
+
+
+HAL_StatusTypeDef spi_steami_transfer(uint8_t* data, uint16_t data_size, uint32_t timeout){
+    if( handle_spi == NULL ) return HAL_ERROR;
+
+    HAL_StatusTypeDef status;
+
+    enable_cs();
+    status = HAL_SPI_Transmit(handle_spi, data, data_size, timeout );
     disable_cs();
 
     return status;
