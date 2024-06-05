@@ -1,23 +1,23 @@
 #include "steami_spi.h"
 
+#include <stdint.h>
+
 #include "stm32f1xx_hal_gpio.h"
-#include "stdint.h"
 
-#include "steami_i2c.h"
-
-SPI_HandleTypeDef* handle_spi = NULL;
+static SPI_HandleTypeDef hspi1;
 
 void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi){
     __HAL_RCC_SPI1_CLK_ENABLE();
     __HAL_RCC_GPIOB_CLK_ENABLE();
     __HAL_RCC_GPIOC_CLK_ENABLE();
+    __HAL_RCC_AFIO_CLK_ENABLE();
 
 
     GPIO_InitTypeDef spi_gpio = {0};
 
     spi_gpio.Pin = GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5;
     spi_gpio.Mode = GPIO_MODE_AF_PP;
-    spi_gpio.Pull = GPIO_PULLUP;
+    spi_gpio.Pull = GPIO_NOPULL;
     spi_gpio.Speed = GPIO_SPEED_FREQ_HIGH;
 
     __HAL_AFIO_REMAP_SPI1_ENABLE();
@@ -26,7 +26,9 @@ void HAL_SPI_MspInit(SPI_HandleTypeDef *hspi){
 
     spi_gpio.Pin = GPIO_PIN_15;
     spi_gpio.Mode = GPIO_MODE_OUTPUT_PP;
+    spi_gpio.Pull = GPIO_NOPULL;
     HAL_GPIO_Init(GPIOC, &spi_gpio);
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
 }
 
 void HAL_SPI_MspDeInit(SPI_HandleTypeDef *hspi){
@@ -63,83 +65,46 @@ uint32_t get_baudrate_prescaler(uint32_t target_baudrate){
 }
 
 void enable_cs(){
-    /*
-        Erratum 2.3.7 "I2C1 with SPI1 remapped and used in master mode" https://www.st.com/content/ccc/resource/technical/document/errata_sheet/7d/02/75/64/17/fc/4d/fd/CD00190234.pdf/files/CD00190234.pdf/jcr:content/translations/en.CD00190234.pdf
-        
-        **Descirption**
-        When the following conditions are met:
-            • I2C1 and SPI1 are clocked.
-            • SPI1 is remapped.
-            • I/O port pin PB5 is configured as an alternate function output
-        there is a conflict between the SPI1 MOSI and the I2C1 SMBA signals (even if SMBA is not used).
-        
-        **Workaround**
-            Do not use SPI1 remapped in master mode and I2C1 together.
-            When using SPI1 remapped, the I2C1 clock must be disabled
-    */
-    steami_i2c_deinit();
-    steami_spi_init();
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_RESET);
-    HAL_Delay(1);
 }
 
 void disable_cs(){
     HAL_GPIO_WritePin(GPIOC, GPIO_PIN_15, GPIO_PIN_SET);
-    steami_spi_deinit();
-    steami_i2c_init();
 }
 
-void steami_spi_set_handler(SPI_HandleTypeDef* hspi){
-    handle_spi = hspi;
+bool steami_spi_init(){
+    hspi1.Instance = SPI1;
+    hspi1.Init.Mode = SPI_MODE_MASTER;
+    hspi1.Init.Direction = SPI_DIRECTION_2LINES;
+    hspi1.Init.DataSize = SPI_DATASIZE_8BIT;
+    hspi1.Init.CLKPolarity = SPI_POLARITY_LOW;
+    hspi1.Init.CLKPhase = SPI_PHASE_1EDGE;
+    hspi1.Init.NSS = SPI_NSS_SOFT;
+    hspi1.Init.BaudRatePrescaler = get_baudrate_prescaler(2000000);
+    hspi1.Init.FirstBit = SPI_FIRSTBIT_MSB;
+    hspi1.Init.TIMode = SPI_TIMODE_DISABLE;
+    hspi1.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+
+    return HAL_SPI_Init(&hspi1) == HAL_OK;
 }
 
-HAL_StatusTypeDef steami_spi_init(){
-
-    if( handle_spi == NULL ) return HAL_ERROR;
-
-    handle_spi->Instance = SPI1;
-    handle_spi->Init.Mode = SPI_MODE_MASTER;
-    handle_spi->Init.Direction = SPI_DIRECTION_2LINES;
-    handle_spi->Init.DataSize = SPI_DATASIZE_8BIT;
-    handle_spi->Init.CLKPolarity = SPI_POLARITY_LOW;
-    handle_spi->Init.CLKPhase = SPI_PHASE_1EDGE;
-    handle_spi->Init.NSS = SPI_NSS_SOFT;
-    handle_spi->Init.BaudRatePrescaler = get_baudrate_prescaler(2000000);
-    handle_spi->Init.FirstBit = SPI_FIRSTBIT_MSB;
-    handle_spi->Init.TIMode = SPI_TIMODE_DISABLE;
-    handle_spi->Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
-
-    return HAL_SPI_Init(handle_spi);
-}
-
-HAL_StatusTypeDef steami_spi_deinit(){
-    if( handle_spi == NULL ) return HAL_ERROR;
-
-    return HAL_SPI_DeInit(handle_spi);
-}
-
-
-HAL_StatusTypeDef spi_steami_transfer_receive(uint8_t* tx_buffer, uint8_t* rx_buffer, uint16_t buffer_size, uint32_t timeout){
-    if( handle_spi == NULL ) return HAL_ERROR;
-
+bool spi_steami_transfer_receive(uint8_t* tx_buffer, uint8_t* rx_buffer, uint16_t buffer_size, uint32_t timeout){
     HAL_StatusTypeDef status;
 
     enable_cs();
-    status = HAL_SPI_TransmitReceive(handle_spi, tx_buffer, rx_buffer, buffer_size, timeout);
+    status = HAL_SPI_TransmitReceive(&hspi1, tx_buffer, rx_buffer, buffer_size, timeout);
     disable_cs();
 
-    return status;
+    return status == HAL_OK;
 }
 
 
-HAL_StatusTypeDef spi_steami_transfer(uint8_t* data, uint16_t data_size, uint32_t timeout){
-    if( handle_spi == NULL ) return HAL_ERROR;
-
+bool spi_steami_transfer(uint8_t* data, uint16_t data_size, uint32_t timeout){
     HAL_StatusTypeDef status;
 
     enable_cs();
-    status = HAL_SPI_Transmit(handle_spi, data, data_size, timeout );
+    status = HAL_SPI_Transmit(&hspi1, data, data_size, timeout );
     disable_cs();
 
-    return status;
+    return status == HAL_OK;
 }
