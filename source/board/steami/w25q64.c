@@ -1,6 +1,8 @@
 #include "w25q64.h"
 #include "steami_spi.h"
 
+#include "stm32f1xx_hal_gpio.h"
+
 #include "string.h"
 
 bool w25q64_init(){
@@ -18,8 +20,18 @@ bool w25q64_init(){
 
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
-
+    
+    w25q64_hard_reset();
+    
     return w25q64_read_device_id() == 0x16;
+}
+
+void w25q64_hard_reset(){
+    HAL_Delay(5);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_RESET);
+    HAL_Delay(5);
+    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_9, GPIO_PIN_SET);
+    HAL_Delay(5);
 }
 
 void w25q64_write_enable(){
@@ -77,8 +89,8 @@ uint8_t w25q64_read_status_register_3(){
     return status[1];
 }
 
-void w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len){
-    uint16_t buffer_len = 4 + (uint16_t)read_len;
+bool w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len){
+    uint16_t buffer_len = 4 + read_len;
 
 
     if( buffer_len > 260 ){ buffer_len = 260; }
@@ -91,13 +103,16 @@ void w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len){
     buffer[2] = (address & 0x0000FF00) >> 8;
     buffer[3] = address & 0x000000FF;
 
-    spi_steami_transfer_receive(buffer, buffer, buffer_len, 1000);
-    
-    memcpy(data, buffer + 4, read_len);
+    if( spi_steami_transfer_receive(buffer, buffer, buffer_len, 1000) ){
+        memcpy(data, buffer + 4, read_len);
+        return true;
+    }
+
+    return false;
 }
 
-void w25q64_page_program(uint8_t* data, uint32_t address, uint16_t data_len){
-    uint16_t buffer_len = 4 + (uint16_t)data_len;
+bool w25q64_page_program(uint8_t* data, uint32_t address, uint16_t data_len){
+    uint16_t buffer_len = 4 + data_len;
 
     if( buffer_len > 260 ){ buffer_len = 260; }
 
@@ -109,13 +124,17 @@ void w25q64_page_program(uint8_t* data, uint32_t address, uint16_t data_len){
     buffer[2] = (address & 0x0000FF00) >> 8;
     buffer[3] = address & 0x000000FF;
 
-    spi_steami_transfer(buffer, buffer_len, 1000);
+    return spi_steami_transfer(buffer, buffer_len, 1000);
 }
 
-void w25q64_sector_erase(uint32_t address){
-    uint8_t buffer[4] = { 0x20, (address & 0x00FF0000) >> 16, (address & 0x0000FF00) >> 8, address & 0x000000FF};
+bool w25q64_sector_erase(uint32_t address){
+    uint8_t buffer[4];
+    buffer[0] = 0x20;
+    buffer[1] = (address & 0x00FF0000) >> 16;
+    buffer[2] = (address & 0x0000FF00) >> 8;
+    buffer[3] = address & 0x000000FF;
 
-    spi_steami_transfer(buffer, 4, 1000);
+    return spi_steami_transfer(buffer, 4, 1000);
 }
 
 void w25q64_block_32k_erase(uint32_t address){

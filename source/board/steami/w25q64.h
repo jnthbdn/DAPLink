@@ -5,6 +5,8 @@
 
 bool w25q64_init();
 
+void w25q64_hard_reset();
+
 uint8_t w25q64_read_device_id();
 uint8_t w25q64_read_manufacturer_id();
 
@@ -39,7 +41,7 @@ void w25q64_write_enable();
  * @param address   address to start reading
  * @param read_len  Number of byte to read (max. 256)
  */
-void w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len);
+bool w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len);
 
 /**
  * @brief The Page Program instruction allows from one byte to 256 bytes (a page) of data to be programmed at previously erased (FFh) memory locations.
@@ -48,14 +50,14 @@ void w25q64_read_data(uint8_t* data, uint32_t address, uint16_t read_len);
  * @param address the adresse to start writing (be carefull, if the end of the page is reach before the end of data, the address will wrap to the begin of the page)
  * @param data_len Number of byte to write (max 256)
  */
-void w25q64_page_program(uint8_t* data, uint32_t address, uint16_t data_len);
+bool w25q64_page_program(uint8_t* data, uint32_t address, uint16_t data_len);
 
 /**
  * @brief The Sector Erase instruction sets all memory within a specified sector (4K-bytes) to the erased state of all 1s (FFh).
  * 
  * @param address Address of sector to be deleted
  */
-void w25q64_sector_erase(uint32_t address);
+bool w25q64_sector_erase(uint32_t address);
 
 /**
  * @brief The Sector Erase instruction sets all memory within a specified sector (32K-bytes) to the erased state of all 1s (FFh).
