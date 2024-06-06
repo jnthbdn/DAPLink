@@ -107,7 +107,6 @@ void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
 
 void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c){
     if( is_listen_I2C ) HAL_I2C_EnableListen_IT(hi2c);
-    steami_uart_write_string("Slave Tx\n");
 }
 
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c){
@@ -250,7 +249,7 @@ void steami_i2c_process(){
         HAL_I2C_DisableListen_IT(&hi2c2);
         switch( HAL_I2C_Slave_Transmit_DMA(&hi2c2, tx_i2c_data, tx_i2c_len_data) ){
             case HAL_OK:
-                steami_uart_write_string("I2C DMA Success\n");
+                // steami_uart_write_string("I2C DMA Success\n");
                 break;
 
             case HAL_ERROR:
