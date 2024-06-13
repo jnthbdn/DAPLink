@@ -259,11 +259,12 @@ void process_task()
 
         switch(current_task){
 
-            case TASK_WHO_AM_I:
+            case TASK_WHO_AM_I: {
                 uint8_t id = 0x4C;
                 steami_i2c_set_tx_data(&id, 1);
                 current_task = TASK_NONE;
                 break;
+            }
 
             case TASK_CLEAR_FLASH:
                 if( steami_flash_is_busy() ){
@@ -337,7 +338,7 @@ void process_task()
                 break;
             }
 
-            case TASK_WRITE_DATA_COUNT:
+            case TASK_WRITE_DATA_COUNT: {
                 uint32_t current_size = steami_flash_get_size();
 
                 if( current_size == STEAMI_FLASH_FILE_SIZE ){
@@ -349,6 +350,7 @@ void process_task()
                     current_task = TASK_WRITE_DATA_WRITE;
                 }
                 break;
+            }
 
             case TASK_WRITE_DATA_WRITE:{
                 if( steami_flash_is_busy() ){
