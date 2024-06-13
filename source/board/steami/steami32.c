@@ -70,6 +70,10 @@ The error register provides information on errors encountered by the device.
 | 6   | Bad Filename        | The filename contains invalid characters                 0x00000020                               |
 | 7   | Last Command Failed | The last command failed                                                                 |
 */
+#ifdef CMSIS_DAP_PRODUCT_NAME
+#error "CMSIS_DAP_PRODUCT_NAME already defined"
+#endif
+#define CMSIS_DAP_PRODUCT_NAME "STeaMi"
 
 #include "main_interface.h"
 #include "target_family.h"
