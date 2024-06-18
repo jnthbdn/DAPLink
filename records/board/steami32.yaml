@@ -1,0 +1,10 @@
+common:
+    macros:
+        - USB_PROD_STR="STeaMi CMSIS-DAP"
+        - HAL_I2C_MODULE_ENABLED
+        - HAL_SPI_MODULE_ENABLED
+    sources:
+        board:
+            - source/board/steami/
+        family:
+            - source/family/st/stm32wb55rg/target.c
