@@ -8,6 +8,8 @@
 #include "virtual_fs.h"
 #include "stm32f1xx_hal.h"
 
+#include "steami_uart.h"
+#include "steami_led.h"
 
 static char user_filename[STEAMI_FLASH_NAME_SIZE] = {'\0'};
 static uint8_t stream_buffer[STEAMI_FLASH_MAX_DATA_SIZE] = {0};
@@ -28,10 +30,9 @@ static uint32_t steami_read_file(uint32_t sector_offset, uint8_t* data, uint32_t
 
     for(uint16_t i = 0; i < VFS_SECTOR_SIZE / STEAMI_FLASH_MAX_DATA_SIZE; i++){
         uint16_t available = steami_flash_read_file(stream_buffer, STEAMI_FLASH_MAX_DATA_SIZE, read_offset);
+
         if( available > 0 ){
-            for( uint16_t j = 0; j < available; j++ ){
-                data[(VFS_SECTOR_SIZE * i) + j] = stream_buffer[j];
-            }
+            memcpy(data + (STEAMI_FLASH_MAX_DATA_SIZE * i), stream_buffer, available);
         }
 
         read_offset += STEAMI_FLASH_MAX_DATA_SIZE;
@@ -50,11 +51,13 @@ bool steami_flash_init(){
 void steami_flash_create_file(){
     if( steami_flash_get_size() > 0 ){
         steami_flash_get_filename(user_filename);
-        vfs_create_file(user_filename, steami_read_file, NULL, steami_flash_get_size());
+        vfs_file_t file_handle = vfs_create_file(user_filename, steami_read_file, NULL, steami_flash_get_size());
+        vfs_file_set_attr(file_handle, VFS_FILE_ATTR_READ_ONLY);
     }
 }
 
 void steami_flash_erase(){
+    steami_led_turn_on_blue();
     uint32_t size = steami_flash_get_size();
     uint32_t offset = 0;
 
@@ -82,23 +85,38 @@ void steami_flash_erase(){
             size -= (size >= STEAMI_FLASH_4K) ? STEAMI_FLASH_4K : size;
         }
     }
+
+    steami_led_turn_off_blue();
 }
 
 bool steami_flash_erase_filename_sector(){
 
+    steami_led_turn_on_blue();
+
     w25q64_write_enable();
     wait_w25q64_wel();
 
     wait_w25q64_busy();
-    return w25q64_sector_erase(STEAMI_FLASH_NAME_ADDR);
+    bool result = w25q64_sector_erase(STEAMI_FLASH_NAME_ADDR);
+
+    steami_led_turn_off_blue();
+
+    return result;
 }
 
 bool steami_flash_set_filename(char* filename){
+
+    steami_led_turn_on_blue();
+
     w25q64_write_enable();
     wait_w25q64_wel();
 
     wait_w25q64_busy();
-    return w25q64_page_program(filename, STEAMI_FLASH_NAME_ADDR, STEAMI_FLASH_NAME_SIZE);
+    bool result = w25q64_page_program(filename, STEAMI_FLASH_NAME_ADDR, STEAMI_FLASH_NAME_SIZE);
+
+
+    steami_led_turn_off_blue();
+    return result;
 }
 
 void steami_flash_get_filename(char* filename){ 
@@ -110,6 +128,8 @@ void steami_flash_get_filename(char* filename){
 }
 
 uint32_t steami_flash_get_size(){
+    // return 8;
+
     uint8_t data[STEAMI_FLASH_MAX_DATA_SIZE];
     memset(data, 0xFF, STEAMI_FLASH_MAX_DATA_SIZE);
 
@@ -127,13 +147,25 @@ uint32_t steami_flash_get_size(){
     return STEAMI_FLASH_FILE_SIZE;
 }
 
+void steami_flash_get_filename_mount(char* filename){
+    if( user_filename[0] == '\0' ){
+        steami_flash_get_filename(user_filename);
+    }
+
+    memcpy(filename, user_filename, STEAMI_FLASH_NAME_SIZE);
+}
+
 int16_t steami_flash_append_file(uint8_t* data, uint16_t data_len){
+
+    steami_led_turn_on_blue();
+
     uint32_t offset = steami_flash_get_size();
     uint8_t block = offset / STEAMI_FLASH_64K;
     uint16_t address_block = offset % STEAMI_FLASH_64K;
     uint16_t page = address_block / 256;
     uint16_t offset_page = address_block % 256;
     uint16_t available_space = 256 - offset_page;
+    uint16_t bytes_wrote = 0;
 
     if( available_space > data_len ){
         available_space = data_len;
@@ -145,11 +177,15 @@ int16_t steami_flash_append_file(uint8_t* data, uint16_t data_len){
 
     wait_w25q64_busy();
     if( w25q64_page_program(data, offset, available_space) ){
-        return available_space;
+
+        bytes_wrote = available_space;
     }
     else{
-        return -1;
+        bytes_wrote = -1;
     }
+
+    steami_led_turn_off_blue();
+    return bytes_wrote;
 }
 
 bool steami_flash_read_sector(uint32_t sector_number, uint8_t* data){
