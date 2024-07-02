@@ -79,7 +79,6 @@ static uint16_t get_argument_byte_number(uint8_t cmd){
 static void execute_command(){
 
     if( is_command_valid(rx_i2c_command) && on_cmd_recv != NULL ){
-        // on_cmd_recv( (steami_i2c_command)rx_i2c_command, rx_i2c_argument, rx_i2c_len_argument - 1);
         on_cmd_recv( (steami_i2c_command)rx_i2c_command, rx_i2c_argument, rx_i2c_len_argument);
         rx_i2c_command = 0;
     }
