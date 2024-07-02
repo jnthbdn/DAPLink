@@ -61,6 +61,13 @@ bool steami_flash_set_filename(char* filename);
 void steami_flash_get_filename(char* filename);
 
 /**
+ * @brief Get the file name currently displayed in the mounted device (may be different from the current file name in flash), this file name only changes after DapLink restarts.
+ * 
+ * @param filename The buffer to store the filename. WARNING: The table must have a minimum size of 11 charaters. No terminating null character will be added.
+ */
+void steami_flash_get_filename_mount(char* filename);
+
+/**
  * @brief Get file size in flash
  * 
  * @return uint32_t
