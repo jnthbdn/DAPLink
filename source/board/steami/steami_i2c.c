@@ -20,7 +20,7 @@ static steami_cmd_callback on_cmd_recv = NULL;
 
 static uint8_t rx_i2c_command = 0x00;
 static uint8_t rx_i2c_argument[STEAMI_I2C_RX_BUFFER_SIZE] = {0};
-static uint8_t rx_i2c_len_argument = 0;
+static uint16_t rx_i2c_len_argument = 0;
 
 static uint8_t tx_i2c_data[STEAMI_I2C_TX_BUFFER_SIZE] = {0};
 static uint16_t tx_i2c_len_data = 0;
@@ -38,9 +38,50 @@ static bool is_command_valid(uint8_t cmd){
         case STATUS:
         case ERROR_STATUS:
             return true;
-        
+
         default:
             return false;
+    }
+}
+
+static uint16_t get_argument_byte_number(uint8_t cmd){
+    switch (cmd)
+    {
+        case WHO_AM_I:
+            return 0;
+
+        case CLEAR_FLASH:
+            return 0;
+
+        case SET_FILENAME:
+            return 11;
+
+        case GET_FILENAME:
+            return 0;
+
+        case WRITE_DATA:
+            return 31;
+
+        case READ_SECTOR:
+            return 2;
+
+        case STATUS:
+            return 0;
+
+        case ERROR_STATUS:
+            return 0;
+
+        default:
+            return 0;
+    }
+}
+
+static void execute_command(){
+
+    if( is_command_valid(rx_i2c_command) && on_cmd_recv != NULL ){
+        // on_cmd_recv( (steami_i2c_command)rx_i2c_command, rx_i2c_argument, rx_i2c_len_argument - 1);
+        on_cmd_recv( (steami_i2c_command)rx_i2c_command, rx_i2c_argument, rx_i2c_len_argument);
+        rx_i2c_command = 0;
     }
 }
 
@@ -82,11 +123,11 @@ void HAL_I2C_MspDeInit(I2C_HandleTypeDef *hi2c){
 
 void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, uint16_t AddrMatchCode)
 {
-    if(TransferDirection == I2C_DIRECTION_TRANSMIT) 
+    if(TransferDirection == I2C_DIRECTION_TRANSMIT)
 	{
         tx_i2c_len_data = 0;
         rx_i2c_len_argument = 0;
-        HAL_I2C_Slave_Seq_Receive_IT(hi2c, &rx_i2c_command, 1, I2C_NEXT_FRAME);
+        HAL_I2C_Slave_Seq_Receive_IT(hi2c, &rx_i2c_command, 1, I2C_FIRST_FRAME);
     }
 	else if(TransferDirection == I2C_DIRECTION_RECEIVE)
 	{
@@ -97,11 +138,18 @@ void HAL_I2C_AddrCallback(I2C_HandleTypeDef *hi2c, uint8_t TransferDirection, ui
 
 void HAL_I2C_SlaveRxCpltCallback(I2C_HandleTypeDef *hi2c)
 {
-    HAL_I2C_Slave_Seq_Receive_IT(hi2c, rx_i2c_argument + rx_i2c_len_argument, 1, I2C_NEXT_FRAME);
-    rx_i2c_len_argument++;
+    if( rx_i2c_len_argument > 0 ){       
+        execute_command();
+    }
+    else{
+        rx_i2c_len_argument = get_argument_byte_number(rx_i2c_command);
 
-    if( rx_i2c_len_argument >= STEAMI_I2C_RX_BUFFER_SIZE){
-        rx_i2c_len_argument = 0;
+        if( rx_i2c_len_argument > 0 ){
+            HAL_I2C_Slave_Seq_Receive_IT(hi2c, rx_i2c_argument, rx_i2c_len_argument, I2C_NEXT_FRAME);
+        }
+        else{
+            execute_command();
+        }
     }
 }
 
@@ -111,16 +159,7 @@ void HAL_I2C_SlaveTxCpltCallback(I2C_HandleTypeDef *hi2c){
 
 void HAL_I2C_ListenCpltCallback(I2C_HandleTypeDef *hi2c){
 
-    // __disable_irq();
-
-    if( is_command_valid(rx_i2c_command) && on_cmd_recv != NULL ){
-        on_cmd_recv( (steami_i2c_command)rx_i2c_command, rx_i2c_argument, rx_i2c_len_argument - 1);
-        rx_i2c_command = 0;
-    }
-
     if( is_listen_I2C ) HAL_I2C_EnableListen_IT(hi2c);
-
-    // __enable_irq();
 }
 
 void HAL_I2C_ErrorCallback(I2C_HandleTypeDef *hi2c){
