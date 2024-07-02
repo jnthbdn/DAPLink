@@ -38,8 +38,8 @@ Here's a table summarizing the commands available via I2C, their description, pa
 | Set filename    | 0x03         | 11 octets       | _NONE_     | Defines the file name, using the 8.3 naming standard ([https://en.wikipedia.org/wiki/8.3_filename](https://en.wikipedia.org/wiki/8.3_filename)). If the file name (or extension) is less than 8 characters (respectively, 3 characters), use spaces to fill (`0x20`). |
 | Get filename    | 0x04         | _NONE_          | 11 octets  | Get the file name.                                                                                                                                                                                                                                                    |
 | Clear Flash     | 0x10         | _NONE_          | _NONE_     | Erase file content.                                                                                                                                                                                                                                                   |
-| Write data      | 0x11         | 256 octets max. | _NONE_     | Append data to file.                                                                                                                                                                                                                                                  |
-| Read sector     | 0x20         | 1 octet         | 256 octets | Read a sector (the parameters must be between 0-32768)                                                                                                                                                                                                                |
+| Write data      | 0x11         | 1 + 30 octets   | _NONE_     | Append data to file. The first byte is the number of data to add.                                                                                                                                                                                                     |
+| Read sector     | 0x20         | 2 octet         | 256 octets | Read a sector (the parameters must be between 0-32768)                                                                                                                                                                                                                |
 | Status Register | 0x80         | _NONE_          | 1 octet    | Get the status register (see below)                                                                                                                                                                                                                                   |
 | Error Register  | 0x81         | _NONE_          | 1 octet    | Get the error register (see below)                                                                                                                                                                                                                                    |
 
@@ -67,7 +67,7 @@ The error register provides information on errors encountered by the device.
 | 3   | _RESERVED_          |                                                                                         |
 | 4   | _RESERVED_          |                                                                                         |
 | 5   | File is Full        | The file has reached its maximum size, and no more data can be added.                   |
-| 6   | Bad Filename        | The filename contains invalid characters                 0x00000020                               |
+| 6   | Bad Filename        | The filename contains invalid characters                                                |
 | 7   | Last Command Failed | The last command failed                                                                 |
 */
 #ifdef CMSIS_DAP_PRODUCT_NAME
@@ -88,6 +88,7 @@ The error register provides information on errors encountered by the device.
 #include "steami_i2c.h"
 #include "steami_spi.h"
 #include "steami_uart.h"
+#include "steami_led.h"
 #include "w25q64.h"
 #include "steami_flash.h"
 #include "error_status.h"
@@ -122,37 +123,11 @@ static uint8_t buffer_sector[STEAMI_FLASH_SECTOR] = {0};
 static uint8_t task_rx[STEAMI_I2C_RX_BUFFER_SIZE] = {'\0'};
 static uint16_t task_rx_len = 0;
 static uint8_t status_error = 0;
+static bool is_user_delete_file_flash = false;
 
 static bool is_busy(){ return current_task != TASK_NONE; }
 
-static void steami_init_led(){
-    GPIO_InitTypeDef led = {0};
-    led.Pin = GPIO_PIN_6;
-    led.Mode = GPIO_MODE_OUTPUT_PP;
-    led.Pull = GPIO_NOPULL;
-    led.Speed = GPIO_SPEED_FREQ_HIGH;
-
-    HAL_GPIO_Init(GPIOA, &led);
-
-    led.Pin = GPIO_PIN_1;
-    HAL_GPIO_Init(GPIOB, &led);
-
-    HAL_GPIO_WritePin(GPIOA, GPIO_PIN_6, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOB, GPIO_PIN_1, GPIO_PIN_SET);
-}
-
-static void toggle_led_blue(){
-    HAL_GPIO_TogglePin(GPIOA, GPIO_PIN_6);
-}
-
-static void toggle_led_green(){
-    HAL_GPIO_TogglePin(GPIOB, GPIO_PIN_1);
-}
-
 static void on_I2C_receive_command(steami_i2c_command cmd, uint8_t* rx, uint16_t rx_len){
-
-    // toggle_led_blue();
-
     if( rx_len > STEAMI_I2C_RX_BUFFER_SIZE ){
         rx_len = STEAMI_I2C_RX_BUFFER_SIZE;
     }
@@ -207,9 +182,14 @@ static void on_I2C_receive_command(steami_i2c_command cmd, uint8_t* rx, uint16_t
                 break;
             }
 
+            if(rx_len < 2){
+                error_status_bad_parameter(&status_error);
+                break;
+            }
+
             current_task = TASK_WRITE_DATA_COUNT;
-            memcpy(task_rx, rx, rx_len);
-            task_rx_len = rx_len;
+            task_rx_len = rx[0];
+            memcpy(task_rx, rx + 1, task_rx_len);
             break;
         
         case READ_SECTOR:{
@@ -250,10 +230,16 @@ static void on_I2C_receive_command(steami_i2c_command cmd, uint8_t* rx, uint16_t
 
 void process_task()
 {
-    // toggle_led_green();
+    // steami_led_toggle_green();
 
     steami_i2c_process();
     steami_uart_send();
+
+
+    if( current_task == TASK_NONE && is_user_delete_file_flash ){
+        current_task = TASK_CLEAR_FLASH;
+        is_user_delete_file_flash = false;
+    }
 
     if(current_task != TASK_NONE){
 
@@ -422,10 +408,12 @@ static void prerun_board_config(void)
 {
     steami_i2c_on_receive_command(on_I2C_receive_command);
     
-    if(! steami_tim_init(10) ){
-        steami_error_file_set_content( "TIM init failed");
-        return;
-    }
+    steami_led_init();
+
+    // if(! steami_tim_init(10) ){
+    //     steami_error_file_set_content( "TIM init failed");
+    //     return;
+    // }
 
     if( ! steami_uart_init() ){
         steami_error_file_set_content( "UART init failed");
@@ -456,9 +444,8 @@ static void prerun_board_config(void)
         return;
     }
 
-    steami_init_led();
 
-    steami_tim_set_callback(process_task);
+    // steami_tim_set_callback(process_task);
     steami_uart_write_string("STeaMi DapLink: Ready\n");
 }
 
@@ -498,6 +485,48 @@ uint32_t osRtxErrorNotify (uint32_t code, void *object_id){
             steami_uart_write_string("[OS RTX ERROR]: Unknown error\n");
         break;
     }
+}
+
+bool vfs_user_magic_file_hook(const vfs_filename_t filename, bool *do_remount)
+{
+    return false;
+}
+
+bool vfs_user_file_change_handler_hook(const vfs_filename_t filename, vfs_file_change_t change, vfs_file_t file, vfs_file_t new_file_data)
+{
+    char mount_filename[11];
+    steami_flash_get_filename_mount(mount_filename);
+
+    if( strncmp(mount_filename, filename, 11) == 0 ){
+
+        switch(change){
+            case VFS_FILE_CREATED:
+                steami_uart_write_string("[STEAMI FLASH] User file created\n");
+                break;
+
+            case VFS_FILE_CHANGED:
+                steami_uart_write_string("[STEAMI FLASH] User file changed\n");
+                break;
+
+            case VFS_FILE_DELETED:
+                steami_uart_write_string("[STEAMI FLASH] User file deleted\n");
+                is_user_delete_file_flash = true;
+                break;
+
+            default:
+                steami_uart_write_string("[STEAMI FLASH] Unknown change...\n");
+                break;
+        }
+
+        return true;
+    }
+
+
+    return false;
+}
+void board_30ms_hook(void)
+{
+    process_task();
 }
 
 const board_info_t g_board_info = {
