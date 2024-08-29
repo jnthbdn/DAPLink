@@ -92,7 +92,6 @@ The error register provides information on errors encountered by the device.
 #include "w25q64.h"
 #include "steami_flash.h"
 #include "error_status.h"
-#include "steami_tim.h"
 
 #include <stdlib.h>
 #include <ctype.h>
@@ -409,11 +408,6 @@ static void prerun_board_config(void)
     steami_i2c_on_receive_command(on_I2C_receive_command);
     
     steami_led_init();
-
-    // if(! steami_tim_init(10) ){
-    //     steami_error_file_set_content( "TIM init failed");
-    //     return;
-    // }
 
     if( ! steami_uart_init() ){
         steami_error_file_set_content( "UART init failed");
