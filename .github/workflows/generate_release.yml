@@ -42,12 +42,17 @@ jobs:
       run: |
         python tools/progen_compile.py -t make_gcc_arm --clean --parallel stm32f103xb_steami32_if
         
+
+    - name: Set environment variable
+      run: echo "RELEASE_NAME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
     - name: Generate Release
-      uses: "marvinpinto/action-automatic-releases@latest"
+      uses: softprops/action-gh-release@v2
       with:
-        repo_token: "${{ secrets.GITHUB_TOKEN }}"
+        name: ${{ env.RELEASE_NAME }}
+        tag_name: ${{ env.RELEASE_NAME }}
         prerelease: false
-        automatic_release_tag: "lastest"
+        make_latest: true
         files: |
           projectfiles/make_gcc_arm/stm32f103xb_bl/build/stm32f103xb_bl.bin
           projectfiles/make_gcc_arm/stm32f103xb_bl/build/stm32f103xb_bl_crc.bin
